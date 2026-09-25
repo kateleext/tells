@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "tells",
+  "description": "A brutally honest tracker of everything hidden from you.",
+  "version": "0.1.0",
+  "background": { "service_worker": "dist/background.js", "type": "module" },
+  "content_scripts": [{ "matches": ["http://*/*", "https://*/*"], "js": ["dist/content.js"], "run_at": "document_end" }],
+  "options_page": "options.html",
+  "action": { "default_title": "tells settings" },
+  "permissions": ["storage", "webRequest"],
+  "host_permissions": ["<all_urls>"]
+}

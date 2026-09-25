@@ -15,24 +15,31 @@ export function tricksOf(companies) {
   return t;
 }
 
-const RULES = `You write the banner for a browser extension that shows people who is tracking them on the page they're on.
+const RULES = `You write the banner for tells, a punk browser extension that shows people who is tracking them on the page they're on.
 
-The banner is ONE line across the top of the page: dry, punchy, a little funny, like a friend leaning over and muttering the truth. Max 12 words. No emoji, no hashtags, no exclamation marks.
+Shape: "[who] now [thinks/has you down as] [what this page implies about you]." A short kicker after it is fine if words remain.
+
+The banner is ONE line across the top of the page, in neon. Brutal, blunt, funny, a hacker friend leaning over and saying the quiet part out loud. Max 10 words, count them. No emoji, no hashtags.
+
+Get real about what it means HERE. Don't say "knows you opened the page". Say what the page reveals about the person, in plain street words:
+- an ED treatment page -> they now have you down as maybe having ED
+- a pregnancy test page -> you might be pregnant, and now ad companies think so too
+- a bad-credit card page -> your credit is probably bad, and eight companies took notes
+- a therapy site -> you might be looking for a therapist
+Frame it as what the company can now assume ("has you down as", "thinks", "filed you under"), never as a fact about the reader.
 
 Rules, which keep it credible:
-- Only use the facts given. Name real companies and real counts. Never invent what a company does with data, never state motives.
-- Funny comes from juxtaposition and understatement, not insults. Punch at the practice, not at the reader.
-- If the site is making tracking harder to see or block (tricks), that is usually the best joke.
-- If a blocker stopped most of it, it's fine to be reassuring.
-- If there's nothing much, say so plainly and briefly.
-- Be exact about the action: opening a page is not a search. Say "looking at", "reading about", "on", unless the facts show a search, cart, or purchase.
-- No loaded words (sneaky, shady, creepy, spying). Let the facts be damning.
-- Never mock the reader, their interests, or the page's content. The joke is on the tracking.
+- Only use the facts given. Real company names, real counts. Never invent what a company does with the data, never state the site's motives.
+- Lead with what the companies now assume about the reader. That is the punch. A screen recording can be the punch too.
+- No plumbing, ever: never mention servers, routing, cookies, hashing, pixels or how the data travels.
+- If everything was blocked, gloat on the reader's behalf about who tried and failed.
+- Mild swearing is allowed, rarely. No slurs, no body shaming. Punch at the tracking, never at the reader or their condition.
+- Don't call a page visit a search.
 
 Examples of the register (don't reuse):
-"Your pregnancy test page has 9 new admirers."
-"Eleven companies came to watch you compare credit cards."
-"Meta got the product names scrambled. Google got the page anyway."`;
+"Nine ad companies now think you might be pregnant."
+"Google has you down as maybe needing a divorce lawyer. Your blocker missed it."
+"Clarity is filming your cursor while you shop for bad-credit cards."`;
 
 export function bannerFacts(page, companies, siteKind) {
   const live = companies.filter((c) => !c.blocked);
@@ -41,7 +48,6 @@ export function bannerFacts(page, companies, siteKind) {
     companies_that_got_data: live.length,
     what_they_got: live.slice(0, 8).map((c) => c.line),
     blocked_by_your_blocker: companies.filter((c) => c.blocked).map((c) => c.owner),
-    tricks: tricksOf(companies),
   };
 }
 
@@ -51,7 +57,20 @@ const SCHEMA = {
   required: ["banner"], additionalProperties: false,
 };
 
+// The line has to be about the reader, not the plumbing. One retry, then take what we get.
+function offKey(text, facts) {
+  const brand = facts.site.split(".")[0].toLowerCase();
+  return !/\byou/i.test(text) || text.toLowerCase().startsWith(brand) || text.split(/\s+/).length > 13;
+}
+
 export async function writeBanner(facts, apiKey, model = "claude-sonnet-5") {
+  const first = await ask(facts, apiKey, model);
+  if (!offKey(first, facts)) return first;
+  const second = await ask({ ...facts, rejected: first, why: "Lead with what companies now think about YOU. Don't start with the site's name. Max 10 words." }, apiKey, model).catch(() => first);
+  return offKey(second, facts) ? first : second;
+}
+
+async function ask(facts, apiKey, model) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
