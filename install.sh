@@ -28,11 +28,13 @@ bold "1/2  Anthropic API key (writes the lines)"
 echo "   Get one at https://console.anthropic.com/settings/keys"
 printf '   Paste it (hidden), or press Enter to skip: '
 secret; ANTHROPIC="$VAL"
+[ -z "$ANTHROPIC" ] && echo "   Skipped. tells stays silent until you add it: right-click the tells icon → Options."
 echo
 bold "2/2  TypeSafe API key (Jev decides when to speak up)"
 echo "   Get one at https://typesafe.ai"
 printf '   Paste it (hidden), or press Enter to skip: '
 secret; TYPESAFE="$VAL"
+[ -z "$TYPESAFE" ] && echo "   Skipped. tells stays silent until you add it: right-click the tells icon → Options."
 printf '{"anthropicKey":"%s","typesafeKey":"%s"}\n' "$ANTHROPIC" "$TYPESAFE" > "$DEST/config.json"
 echo "   Saved on this Mac only. Keys go straight to api.anthropic.com and api.typesafe.ai."
 echo

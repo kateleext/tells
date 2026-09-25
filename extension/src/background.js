@@ -18,6 +18,16 @@ const MAX_RUNS = 6;        // per page: live updates (e.g. add to cart), then st
 const tabs = new Map();    // tabId -> state
 const fresh = (url) => ({ url, reqs: new Map(), port: null, page: null, timer: null, sig: "", runs: 0, shown: null });
 
+// A small rolling log in storage, so a run can be inspected without DevTools.
+const trail = [];
+function log(...a) {
+  const line = `${new Date().toISOString().slice(11, 19)} ${a.join(" ")}`;
+  console.info("[tells]", line);
+  trail.push(line);
+  if (trail.length > 80) trail.shift();
+  chrome.storage.local.set({ log: trail }).catch(() => {});
+}
+
 async function keys() {
   const s = await chrome.storage.local.get(["anthropicKey", "typesafeKey"]);
   return { anthropic: s.anthropicKey, typesafe: s.typesafeKey };
@@ -86,7 +96,7 @@ async function track(tabId) {
 
   let siteKind = null;
   if (k.typesafe && live.length) {
-    const j = await classify(st.page, live, k.typesafe).catch((e) => (console.warn("[tells] Jev", e.message), null));
+    const j = await classify(st.page, live, k.typesafe).catch((e) => (log("Jev failed:", e.message.slice(0, 160)), null));
     siteKind = j?.siteKind || null;
     live.forEach((c, i) => (c.sensitivity = j?.companies[i].sensitivity ?? 0));
     live.forEach((c, i) => (c.line = lineFor(c, j?.companies[i].verb).text));
@@ -96,9 +106,9 @@ async function track(tabId) {
   const show = top >= GATE || (tricks.length && top >= 1) || live.some((c) => STRONG.includes(c.top.canon));
   const lines = live.sort((a, b) => (b.sensitivity ?? 0) - (a.sensitivity ?? 0)).map((c) => ({ text: c.line, sensitivity: c.sensitivity ?? null }));
 
-  console.info(`[tells] tracking ${st.page.domain}: ${live.length} live, top ${top.toFixed(2)}, show ${!!show}`);
+  log(`track ${st.page.domain}: ${companies.length} companies (${live.length} live), top ${top.toFixed(2)}, site ${siteKind}, show ${!!show}, run ${st.runs}`);
   // AI or nothing: no key, no failed call, no templated fallback line
-  if (!k.anthropic) return;
+  if (!k.anthropic) { st.sig = ""; return log("track: no Anthropic key"); }
   if (!show) {
     // nothing sensitive got through; if a blocker did real work, gloat in green
     if (!bar || bar.names.length < 3 || st.shown != null) return;
@@ -114,8 +124,9 @@ async function track(tabId) {
     return send({ type: "track-rows", lines, bar: bar?.text || null, tricks });
   }
   st.shown = strongest;
-  const text = await writeBanner(bannerFacts(st.page, companies, siteKind), k.anthropic).catch((e) => (console.warn("[tells] banner", e.message), null));
-  if (!text) { st.shown = null; return; }
+  const text = await writeBanner(bannerFacts(st.page, companies, siteKind), k.anthropic).catch((e) => (log("banner failed:", e.message.slice(0, 160)), null));
+  if (!text) { st.shown = null; st.sig = ""; return; }
+  log(`track line: ${text}`);
   if (st.sig === sig) send({ type: "track", tone: "loud", text, lines, bar: bar?.text || null, tricks });
 }
 
@@ -123,12 +134,13 @@ async function track(tabId) {
 
 async function money(st, send) {
   const k = await keys();
-  if (!k.anthropic || !worthAnalyzing(st.page)) return console.info(`[tells] money skipped: ${st.page.words} words`);
+  if (!k.anthropic || !worthAnalyzing(st.page)) return log(`money skipped ${st.page.domain}: key ${!!k.anthropic}, ${st.page.words} words`);
   const key = `m2:${st.page.url}`; // bump when the money prompt changes
   const hit = (await chrome.storage.local.get(key))[key];
-  const out = hit && Date.now() - hit.at < 7 * 864e5 ? hit.out : await moneyBanner(st.page, k.anthropic);
+  const out = hit && Date.now() - hit.at < 7 * 864e5 ? hit.out : await moneyBanner(st.page, k.anthropic).catch((e) => (log("money failed:", e.message.slice(0, 160)), { verdict: "error", banner: "" }));
+  if (out.verdict === "error") return;
   if (!hit) await chrome.storage.local.set({ [key]: { out, at: Date.now() } });
-  console.info(`[tells] money ${st.page.domain}: ${out.verdict} ${out.banner}`);
+  log(`money ${st.page.domain}: ${out.verdict}${hit ? " (cached)" : ""} ${out.banner}`);
   if (out.verdict === "tell" && out.banner) send({ type: "money", text: out.banner, passages: out.passages });
 }
 
@@ -153,6 +165,7 @@ chrome.runtime.onConnect.addListener((port) => {
     st.port = port;
     st.page = msg.page;
     const k = await keys();
+    log(`hello ${st.page.domain}: ${st.page.words} words, ${st.reqs.size} requests so far, keys anthropic=${!!k.anthropic} typesafe=${!!k.typesafe}`);
     if (!k.anthropic && !k.typesafe) return send({ type: "needs-keys" });
     schedule(tabId, SETTLE);
     money(st, send).catch((e) => console.warn("[tells] money", e.message));
