@@ -35,18 +35,19 @@ page text ─────► Claude: who profits, in ten words, with quotes as r
 - `agent/banner.js`, `agent/money.js`: the two lines (Claude Sonnet 5).
 - `extension/`: Chrome MV3. It watches requests with `webRequest` and marks each one sent or blocked.
 
-## Try it
-
-You need your own keys: an [Anthropic API key](https://console.anthropic.com) and a [TypeSafe API key](https://typesafe.ai). They stay in your browser.
+## Install (Mac, Chrome)
 
 ```sh
-npm install
-npm run build
+curl -fsSL https://raw.githubusercontent.com/kateleext/tells/master/install.sh | sh
 ```
 
-Go to `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and pick `extension/`. Paste your keys in the options page when it opens.
+The installer downloads the extension and asks for your two keys: an [Anthropic API key](https://console.anthropic.com/settings/keys) and a [TypeSafe API key](https://typesafe.ai). They stay on your Mac. Then it walks you through **Load unpacked** in `chrome://extensions`. Arc, Edge and Dia work too.
 
-Pages to try: a pregnancy test page, an ED or therapy site, a "best credit cards for bad credit" list, a "best mattress" roundup.
+Or build it yourself: `npm install && npm run build`, then load `extension/` unpacked and paste your keys into the options page.
+
+Pages to try: a pregnancy test page, an ED or therapy site, a "best credit cards for bad credit" list, a "best mattress" roundup. The Guardian should stay quiet.
+
+**Safari:** coming later. Safari extensions can't watch network requests the way Chrome's can.
 
 ## Test the pipeline without the extension
 
