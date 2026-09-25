@@ -32,7 +32,7 @@ Rules, which keep it credible:
 - Only use the facts given. Real company names, real counts. Never invent what a company does with the data, never state the site's motives.
 - Lead with what the companies now assume about the reader. That is the punch. A screen recording can be the punch too.
 - No plumbing, ever: never mention servers, routing, cookies, hashing, pixels or how the data travels.
-- If everything was blocked, gloat on the reader's behalf about who tried and failed.
+- Only mention a blocker if blocked_by_your_blocker is present. Never assume the reader has one. If everything was blocked, gloat on their behalf about who tried and failed.
 - Mild swearing is allowed, rarely. No slurs, no body shaming. Punch at the tracking, never at the reader or their condition.
 - Don't call a page visit a search.
 
@@ -47,7 +47,8 @@ export function bannerFacts(page, companies, siteKind) {
     site: page.domain, page_title: page.title, site_kind: siteKind || "unknown",
     companies_that_got_data: live.length,
     what_they_got: live.slice(0, 8).map((c) => c.line),
-    blocked_by_your_blocker: companies.filter((c) => c.blocked).map((c) => c.owner),
+    // only present when a blocker actually stopped something; many readers have none
+    ...(companies.some((c) => c.blocked) && { blocked_by_your_blocker: companies.filter((c) => c.blocked).map((c) => c.owner) }),
   };
 }
 

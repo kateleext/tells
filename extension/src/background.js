@@ -16,7 +16,7 @@ const STRONG = ["add_to_cart", "checkout", "purchase"];
 const MAX_RUNS = 6;        // per page: live updates (e.g. add to cart), then stop spending
 
 const tabs = new Map();    // tabId -> state
-const fresh = (url) => ({ url, reqs: new Map(), port: null, page: null, timer: null, sig: "", runs: 0, shown: null });
+const fresh = (url) => ({ url, doc: null, reqs: new Map(), port: null, page: null, timer: null, sig: "", runs: 0, shown: null });
 
 // A small rolling log in storage, so a run can be inspected without DevTools.
 const trail = [];
@@ -54,7 +54,8 @@ chrome.webRequest.onBeforeRequest.addListener((d) => {
   if (d.type === "main_frame") { tabs.set(d.tabId, fresh(d.url)); return; }
   if (!tabs.has(d.tabId)) tabs.set(d.tabId, fresh(d.initiator || d.url));
   const st = tabs.get(d.tabId);
-  st.reqs.set(d.requestId, { url: d.url, method: d.method, body: bodyOf(d.requestBody), outcome: "pending" });
+  // documentId ties each request to the exact page (or iframe in it) that made it
+  st.reqs.set(d.requestId, { url: d.url, method: d.method, body: bodyOf(d.requestBody), outcome: "pending", doc: d.documentId, parent: d.parentDocumentId });
 }, { urls: ["<all_urls>"] }, ["requestBody"]);
 
 const settle = (outcome) => (d) => {
@@ -82,7 +83,10 @@ function schedule(tabId, wait) {
 async function track(tabId) {
   const st = tabs.get(tabId);
   if (!st?.port || st.runs >= MAX_RUNS) return;
-  const { companies } = analyze(st.page, [...st.reqs.values()].filter((r) => r.outcome !== "pending"));
+  // only this document's requests and its iframes': back/forward and restored pages don't
+  // fire a fresh main_frame, so the tab can still hold another page's traffic
+  const mine = (r) => st.doc && (r.doc === st.doc || r.parent === st.doc);
+  const { companies } = analyze(st.page, [...st.reqs.values()].filter((r) => r.outcome !== "pending" && mine(r)));
   const live = companies.filter((c) => !c.blocked);
   // only re-judge when what companies got actually changed
   const sig = companies.map((c) => `${c.owner}:${c.top.canon}:${c.top.item || ""}:${c.blocked}`).sort().join("|");
@@ -162,6 +166,9 @@ chrome.runtime.onConnect.addListener((port) => {
     if (msg.type !== "hello") return;
     if (!tabs.has(tabId)) tabs.set(tabId, fresh(msg.page.url));
     const st = tabs.get(tabId);
+    if (st.doc !== port.sender.documentId) Object.assign(st, { doc: port.sender.documentId, sig: "", runs: 0, shown: null });
+    // drop other documents' traffic so the tab doesn't grow forever
+    for (const [id, r] of st.reqs) if (r.doc !== st.doc && r.parent !== st.doc) st.reqs.delete(id);
     st.port = port;
     st.page = msg.page;
     const k = await keys();

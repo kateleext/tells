@@ -20,6 +20,7 @@ button:focus-visible { outline: 1px dashed var(--pink); outline-offset: 3px; }
 }
 .wrap > .bar { overflow: hidden; min-height: 0; }
 .wrap.in { grid-template-rows: 1fr; }
+.wrap.stuck { position: fixed; top: 0; left: 0; right: 0; transition: none; }
 
 /* ---------- the bar ---------- */
 .bar {

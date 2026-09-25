@@ -53,7 +53,18 @@ function createUI() {
     root.addEventListener("click", onClick);
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") open ? toggle(null) : dismiss(); });
     document.body.prepend(host);
-    requestAnimationFrame(() => requestAnimationFrame(() => host.shadowRoot.querySelector(".wrap").classList.add("in")));
+    const wrap = root.querySelector(".wrap");
+    requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("in")));
+    // In the flow at the top (pushes the page down); once scrolled past, pin it to the window.
+    // The host keeps the bar's height so the page doesn't jump when it pins.
+    const pin = () => {
+      const h = bar.offsetHeight;
+      const stuck = host.getBoundingClientRect().top < 0;
+      host.style.height = stuck ? `${h}px` : "";
+      wrap.classList.toggle("stuck", stuck);
+    };
+    addEventListener("scroll", pin, { passive: true });
+    new ResizeObserver(pin).observe(bar);
   }
 
   function set(kind, msg) {
