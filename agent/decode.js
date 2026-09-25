@@ -84,6 +84,8 @@ function ga4(who, url, body) {
     if (p.get("dl")) facts.push({ label: "Page address", value: pathOf(p.get("dl")) });
     if (p.get("dt")) facts.push({ label: "Page title", value: p.get("dt") });
     if (p.get("cid")) facts.push({ label: "Browser ID", value: "_ga cookie" });
+    const host = new URL(url).hostname;
+    if (!/google/.test(host)) facts.push({ label: "Sent via", value: `${host}, the site's own server, which blockers miss` });
     if (p.get("uid")) facts.push({ label: "Your account ID", value: "on this site" });
     return event(who, canonOf(GA4, name), name, {
       item: prod[0]?.nm || null,

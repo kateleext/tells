@@ -10,11 +10,12 @@
 import { chromium } from "playwright-core";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { decode, ownTracker } from "../agent/decode.js";
-import { group, lineFor } from "../agent/lines.js";
+import { group, lineFor, blockedBar } from "../agent/lines.js";
 import { classify } from "../agent/jev.js";
-import { siteOf } from "../agent/trackers.js";
+import { siteOf, ownerOf } from "../agent/trackers.js";
 
 const headed = process.argv.includes("--headed");
+const block = process.argv.includes("--block"); // simulate an ad blocker on known tracker hosts
 const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const sites = args.length ? args.map((url) => ({ url })) : JSON.parse(readFileSync(new URL("./sites.json", import.meta.url)));
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
@@ -30,7 +31,12 @@ for (const site of sites) {
   const ctx = shared || await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 900 }, locale: "en-US" });
   const tab = await ctx.newPage();
   const reqs = [];
-  tab.on("request", (r) => reqs.push({ url: r.url(), method: r.method(), body: r.postData() || "" }));
+  // outcome per request: what the site attempted vs what actually left the browser
+  const byReq = new Map();
+  tab.on("request", (r) => { const q = { url: r.url(), method: r.method(), body: r.postData() || "", outcome: "pending" }; byReq.set(r, q); reqs.push(q); });
+  tab.on("requestfinished", (r) => byReq.has(r) && (byReq.get(r).outcome = "sent"));
+  tab.on("requestfailed", (r) => byReq.has(r) && (byReq.get(r).outcome = /BLOCKED_BY_CLIENT/.test(r.failure()?.errorText) ? "blocked" : "failed"));
+  if (block) await tab.route((u) => { try { return ownerOf(u.href) && ownerOf(u.href).kind !== "loader"; } catch { return false; } }, (route) => route.abort("blockedbyclient"));
 
   try {
     await tab.goto(site.url, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -53,7 +59,7 @@ for (const site of sites) {
 
   const events = reqs.flatMap((r) => {
     const host = new URL(r.url).hostname;
-    const evs = decode(r);
+    const evs = decode(r).map((e) => ({ ...e, blocked: r.outcome === "blocked" }));
     // first-party requests only count when a decoder recognised them (server-side GA4)
     if (siteOf(host) !== first) return evs;
     return evs.length ? evs : ownTracker(r);
@@ -70,14 +76,16 @@ for (const site of sites) {
 
   const rows = companies.map((c, i) => ({ c, j: judged?.companies[i], line: lineFor(c, judged?.companies[i].verb) }))
     .sort((a, b) => (b.j?.sensitivity ?? 0) - (a.j?.sensitivity ?? 0));
-  const show = rows.some((r) => (r.j?.sensitivity ?? 0) >= GATE || ["record", "add_to_cart", "checkout", "purchase"].includes(r.c.top.canon));
+  const show = rows.some((r) => !r.c.blocked && (r.j?.sensitivity ?? 0) >= GATE || ["record", "add_to_cart", "checkout", "purchase"].includes(r.c.top.canon));
 
   console.log(`\n━━ ${page.domain}  ${judged ? `[${judged.siteKind} ${judged.siteKindConfidence.toFixed(2)}] Jev ${ms}ms` : ""}`);
   console.log(`   ${reqs.length} requests, ${events.length} tracking events, ${companies.length} companies${site.consented ? ", clicked accept" : ""} → card ${show ? "SHOWS" : "stays quiet"}`);
-  for (const { c, j, line } of rows) {
+  for (const { c, j, line } of rows.filter((r) => !r.c.blocked)) {
     console.log(`   ${j ? j.sensitivity.toFixed(1).padStart(4) : "   –"}  ${line.text}`);
     for (const f of c.facts.slice(0, 5)) console.log(`          · ${f.label}: ${f.value}`);
   }
+  const bar = blockedBar(companies);
+  if (bar) console.log(`   \x1b[42m\x1b[30m ${bar.text} \x1b[0m`);
   if (shared) await tab.close(); else await ctx.close();
 }
 await (shared || browser).close();

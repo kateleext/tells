@@ -34,6 +34,7 @@ const OWNERS = [
   ["px-cloud.net", "HUMAN", "fingerprint"], ["px-client.net", "HUMAN", "fingerprint"],
   ["posthog.com", "PostHog", "analytics"], ["freshpaint-impression.com", "Freshpaint", "marketing"], ["freshpaint.io", "Freshpaint", "marketing"],
   ["tiqcdn.com", "Tealium", "loader"],
+  ["tvsquared.com", "Innovid TVSquared", "ads"],
   ["yahoo.com", "Yahoo", "ads"], ["tapad.com", "Tapad", "broker"], ["id5-sync.com", "ID5", "broker"],
 ];
 

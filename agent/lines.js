@@ -12,7 +12,11 @@ export function group(events) {
     if (!by.has(e.owner)) by.set(e.owner, []);
     by.get(e.owner).push(e);
   }
-  return [...by].map(([owner, evs]) => {
+  return [...by].map(([owner, all]) => {
+    // only what got through counts; a company whose every request was blocked keeps its attempts, flagged
+    const through = all.filter((e) => !e.blocked);
+    const blocked = !through.length;
+    const evs = blocked ? all : through;
     // strongest event wins; among equals, prefer one that names something
     const top = evs.reduce((a, b) => {
       const d = RANK.indexOf(b.canon) - RANK.indexOf(a.canon);
@@ -21,7 +25,7 @@ export function group(events) {
     const seen = new Set();
     const facts = evs.flatMap((e) => e.facts).filter((f) => !seen.has(f.label + f.value) && seen.add(f.label + f.value));
     const names = [...new Set(evs.map((e) => e.name).filter(Boolean))];
-    return { owner, kind: evs[0].kind, top, facts, names, events: evs };
+    return { owner, kind: evs[0].kind, top, facts, names, events: evs, blocked, blockedCount: all.length - through.length };
   });
 }
 
@@ -43,11 +47,19 @@ export function lineFor(company, verb) {
     case "book": return L("knows you booked an appointment.");
     case "signup": return L("knows you filled in a form.");
     case "search": return q ? L(`knows you searched ${q}.`, q) : L("knows what you searched.");
-    case "view": if (item) return L(`knows you looked at ${item}.`, item); // else: say which page
     case "custom": return L(`got "${clip(top.name, 24)}" from this page.`);
+    case "view": if (item) return L(`knows you looked at ${item}.`, item); // else: say which page
     default: {
       const page = company.events?.map((e) => e.page).find((p) => p && p.includes("/") && !p.endsWith("/")) || null;
       return page ? L(`knows you opened ${clip(page, 40)}.`, clip(page, 40)) : L("knows you're on this site.");
     }
   }
+}
+
+// Companies whose every request was blocked collapse into one reassuring bar.
+export function blockedBar(companies, blocker = "Your blocker") {
+  const names = companies.filter((c) => c.blocked).map((c) => c.owner);
+  if (!names.length) return null;
+  const who = names.length <= 3 ? names.join(", ").replace(/, ([^,]*)$/, " and $1") : `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  return { text: `${who} tried. ${blocker} got your back.`, names };
 }
