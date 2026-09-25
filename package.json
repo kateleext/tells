@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "probe": "node --env-file-if-exists=.env test/probe.js"
+    "probe": "node --env-file-if-exists=.env test/probe.js",
+    "replay": "node --env-file-if-exists=.env test/replay.js"
   },
   "devDependencies": {
     "playwright-core": "^1.55.0"

@@ -9,8 +9,8 @@
 
 import { chromium } from "playwright-core";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { decode, ownTracker } from "../agent/decode.js";
-import { group, lineFor, blockedBar } from "../agent/lines.js";
+import { analyze } from "../agent/analyze.js";
+import { lineFor, blockedBar } from "../agent/lines.js";
 import { classify } from "../agent/jev.js";
 import { siteOf, ownerOf } from "../agent/trackers.js";
 
@@ -56,15 +56,7 @@ for (const site of sites) {
   })).catch(() => ({ title: "", description: "" }));
   page.domain = new URL(tab.url()).hostname.replace(/^www\./, "");
   const first = siteOf(page.domain);
-
-  const events = reqs.flatMap((r) => {
-    const host = new URL(r.url).hostname;
-    const evs = decode(r).map((e) => ({ ...e, blocked: r.outcome === "blocked" }));
-    // first-party requests only count when a decoder recognised them (server-side GA4)
-    if (siteOf(host) !== first) return evs;
-    return evs.length ? evs : ownTracker(r);
-  });
-  const companies = group(events);
+  const { events, companies } = analyze(page, reqs);
   writeFileSync(`runs/${first}.json`, JSON.stringify({ site, page, reqs, events }, null, 1));
 
   let judged = null, ms = 0;
